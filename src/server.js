@@ -1,6 +1,13 @@
+
 import "dotenv/config";
+import dns from "node:dns";
 import express from "express";
 import cors from "cors";
+
+import { connectDB } from "./config/db.js";
+import booksRouter from "./routes/books.routes.js";
+
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const app = express();
 
@@ -23,7 +30,16 @@ app.get("/api/health", (req, res) => {
     });
 });
 
+// Books API
+app.use("/books", booksRouter);
+
 // Start Server
-app.listen(PORT, () => {
-    console.log(`BookNook Server running on port ${PORT}`);
-});
+const startServer = async () => {
+    await connectDB();
+
+    app.listen(PORT, () => {
+        console.log(`BookNook Server running on port ${PORT}`);
+    });
+};
+
+startServer();
