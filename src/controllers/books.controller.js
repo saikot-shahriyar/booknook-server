@@ -249,6 +249,14 @@ export const updateBook = async (req, res) => {
             });
         }
 
+        // availableCopies must not be controlled directly by client in PATCH
+        if (req.body.availableCopies !== undefined) {
+            return res.status(400).json({
+                success: false,
+                message: "availableCopies cannot be updated directly.",
+            });
+        }
+
         const updateData = {};
         const {
             title,
@@ -258,7 +266,6 @@ export const updateBook = async (req, res) => {
             imageUrl,
             description,
             totalCopies,
-            availableCopies,
         } = req.body;
 
         if (title !== undefined) {
@@ -300,38 +307,32 @@ export const updateBook = async (req, res) => {
             updateData.description = description.trim();
         }
 
-        const newTotal =
-            totalCopies !== undefined ? Number(totalCopies) : existingBook.totalCopies;
-        const newAvailable =
-            availableCopies !== undefined
-                ? Number(availableCopies)
-                : existingBook.availableCopies;
-
         if (totalCopies !== undefined) {
+            const newTotal = Number(totalCopies);
             if (!Number.isInteger(newTotal) || newTotal < 1) {
                 return res.status(400).json({
                     success: false,
                     message: "totalCopies must be a positive integer.",
                 });
             }
-            updateData.totalCopies = newTotal;
-        }
 
-        if (availableCopies !== undefined) {
-            if (!Number.isInteger(newAvailable) || newAvailable < 0) {
+            const currentTotal = Number(existingBook.totalCopies) || 0;
+            const currentAvailable =
+                existingBook.availableCopies !== undefined
+                    ? Number(existingBook.availableCopies)
+                    : currentTotal;
+            const borrowedCopies = Math.max(0, currentTotal - currentAvailable);
+
+            if (newTotal < borrowedCopies) {
                 return res.status(400).json({
                     success: false,
-                    message: "availableCopies must be a non-negative integer.",
+                    message: `totalCopies cannot be less than the number of currently borrowed copies (${borrowedCopies} borrowed).`,
                 });
             }
-            updateData.availableCopies = newAvailable;
-        }
 
-        if (newAvailable > newTotal) {
-            return res.status(400).json({
-                success: false,
-                message: "availableCopies cannot exceed totalCopies.",
-            });
+            const newAvailable = newTotal - borrowedCopies;
+            updateData.totalCopies = newTotal;
+            updateData.availableCopies = newAvailable;
         }
 
         if (Object.keys(updateData).length === 0) {
