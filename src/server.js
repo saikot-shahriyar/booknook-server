@@ -6,6 +6,7 @@ import cors from "cors";
 
 import { connectDB } from "./config/db.js";
 import booksRouter from "./routes/books.routes.js";
+import borrowsRouter from "./routes/borrows.routes.js";
 
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
@@ -32,6 +33,9 @@ app.get("/api/health", (req, res) => {
 
 // Books API
 app.use("/books", booksRouter);
+
+// Borrows API
+app.use("/borrows", borrowsRouter);
 
 // Start Server
 const startServer = async () => {

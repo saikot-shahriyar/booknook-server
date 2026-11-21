@@ -316,23 +316,85 @@ export const updateBook = async (req, res) => {
                 });
             }
 
-            const currentTotal = Number(existingBook.totalCopies) || 0;
-            const currentAvailable =
-                existingBook.availableCopies !== undefined
-                    ? Number(existingBook.availableCopies)
-                    : currentTotal;
-            const borrowedCopies = Math.max(0, currentTotal - currentAvailable);
+            // Atomic update using MongoDB aggregation pipeline:
+            // 1. $expr condition ensures newTotal is >= currently borrowed copies at the exact write instant.
+            // 2. availableCopies is dynamically calculated as newTotal - (totalCopies - availableCopies)
+            //    which safely preserves all concurrent borrow operations.
+            const atomicFilter = {
+                _id: new ObjectId(id),
+                $expr: {
+                    $lte: [
+                        {
+                            $subtract: [
+                                { $ifNull: ["$totalCopies", 0] },
+                                { $ifNull: ["$availableCopies", 0] },
+                            ],
+                        },
+                        newTotal,
+                    ],
+                },
+            };
 
-            if (newTotal < borrowedCopies) {
+            const atomicPipeline = [
+                {
+                    $set: {
+                        ...updateData,
+                        totalCopies: newTotal,
+                        availableCopies: {
+                            $subtract: [
+                                newTotal,
+                                {
+                                    $max: [
+                                        0,
+                                        {
+                                            $subtract: [
+                                                { $ifNull: ["$totalCopies", 0] },
+                                                { $ifNull: ["$availableCopies", 0] },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                        updatedAt: new Date(),
+                    },
+                },
+            ];
+
+            const updatedBook = await db.collection("books").findOneAndUpdate(
+                atomicFilter,
+                atomicPipeline,
+                { returnDocument: "after" }
+            );
+
+            if (!updatedBook) {
+                // If atomic update returned null, determine if book was deleted or if newTotal < borrowedCopies
+                const currentBook = await db.collection("books").findOne({ _id: new ObjectId(id) });
+                if (!currentBook) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Book not found.",
+                    });
+                }
+
+                const currentTotal = Number(currentBook.totalCopies) || 0;
+                const currentAvailable =
+                    currentBook.availableCopies !== undefined
+                        ? Number(currentBook.availableCopies)
+                        : currentTotal;
+                const borrowedCopies = Math.max(0, currentTotal - currentAvailable);
+
                 return res.status(400).json({
                     success: false,
                     message: `totalCopies cannot be less than the number of currently borrowed copies (${borrowedCopies} borrowed).`,
                 });
             }
 
-            const newAvailable = newTotal - borrowedCopies;
-            updateData.totalCopies = newTotal;
-            updateData.availableCopies = newAvailable;
+            return res.status(200).json({
+                success: true,
+                message: "Book updated successfully.",
+                data: updatedBook,
+            });
         }
 
         if (Object.keys(updateData).length === 0) {
@@ -350,7 +412,14 @@ export const updateBook = async (req, res) => {
             { returnDocument: "after" }
         );
 
-        res.status(200).json({
+        if (!updatedBook) {
+            return res.status(404).json({
+                success: false,
+                message: "Book not found.",
+            });
+        }
+
+        return res.status(200).json({
             success: true,
             message: "Book updated successfully.",
             data: updatedBook,
