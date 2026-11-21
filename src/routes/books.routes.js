@@ -1,41 +1,28 @@
-
 import express from "express";
-import { getDB } from "../config/db.js";
+import {
+    getAllBooks,
+    getBookById,
+    createBook,
+    updateBook,
+    deleteBook,
+} from "../controllers/books.controller.js";
+import { verifyAuth } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// GET /books - Get all books
-router.get("/", async (req, res) => {
-    try {
-        const db = getDB();
+// GET /books - Public: Get all books (supports ?limit, ?category, ?userEmail)
+router.get("/", getAllBooks);
 
-        let booksQuery = db
-            .collection("books")
-            .find()
-            .sort({ createdAt: -1 });
+// GET /books/:id - Public: Get single book by ID
+router.get("/:id", getBookById);
 
-        // Optional limit: /books?limit=6
-        const limit = Number(req.query.limit);
+// POST /books - Protected: Add a new book
+router.post("/", verifyAuth, createBook);
 
-        if (Number.isInteger(limit) && limit > 0) {
-            booksQuery = booksQuery.limit(limit);
-        }
+// PATCH /books/:id - Protected: Update book (owner only)
+router.patch("/:id", verifyAuth, updateBook);
 
-        const books = await booksQuery.toArray();
-
-        res.status(200).json({
-            success: true,
-            count: books.length,
-            data: books,
-        });
-    } catch (error) {
-        console.error("Failed to fetch books:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch books.",
-        });
-    }
-});
+// DELETE /books/:id - Protected: Delete book (owner only)
+router.delete("/:id", verifyAuth, deleteBook);
 
 export default router;
