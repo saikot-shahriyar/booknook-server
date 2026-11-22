@@ -28,7 +28,7 @@ async function api(method, path, body, token) {
         body: body ? JSON.stringify(body) : undefined,
     });
     let json = null;
-    try { json = await res.json(); } catch (e) {}
+    try { json = await res.json(); } catch (e) { }
     return { status: res.status, json, headers: res.headers };
 }
 
@@ -39,7 +39,7 @@ async function betterAuthPost(path, body) {
         body: JSON.stringify(body),
     });
     let json = null;
-    try { json = await res.json(); } catch (e) {}
+    try { json = await res.json(); } catch (e) { }
     return { status: res.status, json, headers: res.headers };
 }
 
@@ -123,7 +123,7 @@ async function main() {
         pass("successfulReturn", ret.status === 200 && ret.json.success === true &&
             bookAfter.availableCopies === bookBefore.availableCopies + 1 &&
             !borrowStillExists,
-        { status: ret.status, body: ret.json, availBefore: bookBefore.availableCopies, availAfter: bookAfter.availableCopies, borrowDeleted: !borrowStillExists });
+            { status: ret.status, body: ret.json, availBefore: bookBefore.availableCopies, availAfter: bookAfter.availableCopies, borrowDeleted: !borrowStillExists });
     } else {
         pass("successfulReturn", false, { borrowCreateStatus: "failed" });
     }
@@ -133,19 +133,19 @@ async function main() {
     if (borrowR1) {
         const ret2 = await api("DELETE", `/borrows/${borrowR1._id}`, null, TOKEN1);
         pass("returnSameRecordTwice", ret2.status === 404 && ret2.json.success === false,
-        { status: ret2.status, body: ret2.json });
+            { status: ret2.status, body: ret2.json });
     }
 
     // ============ Test 3: Invalid borrow ID ============
     const retInv = await api("DELETE", "/borrows/notanobjectid", null, TOKEN1);
     pass("invalidBorrowId", retInv.status === 400 && retInv.json.success === false,
-    { status: retInv.status, body: retInv.json });
+        { status: retInv.status, body: retInv.json });
 
     // ============ Test 4: Non-existent borrow ID ============
     const fakeId = new ObjectId().toString();
     const retFake = await api("DELETE", `/borrows/${fakeId}`, null, TOKEN1);
     pass("nonexistentBorrowId", retFake.status === 404 && retFake.json.success === false,
-    { status: retFake.status, body: retFake.json });
+        { status: retFake.status, body: retFake.json });
 
     // ============ Test 5: User returning another user's record ============
     const borrowR2 = await borrowBook(bR2.id, TOKEN2); // user2 borrows book R2
@@ -154,17 +154,17 @@ async function main() {
         // user1 tries to return user2's borrow record
         const retCross = await api("DELETE", `/borrows/${borrowR2._id}`, null, TOKEN1);
         pass("userReturnAnotherUsersRecord", retCross.status === 404 && retCross.json.success === false,
-        { status: retCross.status, body: retCross.json });
+            { status: retCross.status, body: retCross.json });
     }
 
     // ============ Test 6: Missing/invalid JWT ============
     const retNoAuth = await api("DELETE", `/borrows/${bR1.id}`, null, null);
     pass("missingJwt401", retNoAuth.status === 401 && retNoAuth.json.success === false,
-    { status: retNoAuth.status, body: retNoAuth.json });
+        { status: retNoAuth.status, body: retNoAuth.json });
 
     const retBadAuth = await api("DELETE", `/borrows/${bR1.id}`, null, "invalid.token.here");
     pass("invalidJwt401", retBadAuth.status === 401 && retBadAuth.json.success === false,
-    { status: retBadAuth.status, body: retBadAuth.json });
+        { status: retBadAuth.status, body: retBadAuth.json });
 
     // ============ Test 7: Inventory increases by exactly 1 ============
     // Borrow book R1 again (it has 2 copies, one was returned), then return
@@ -175,7 +175,7 @@ async function main() {
         const bookAfter2 = await db.collection("books").findOne({ _id: new ObjectId(bR1.id) });
         pass("inventoryIncreasesByOne", ret2.status === 200 &&
             bookAfter2.availableCopies === bookBefore2.availableCopies + 1,
-        { status: ret2.status, availBefore: bookBefore2.availableCopies, availAfter: bookAfter2.availableCopies });
+            { status: ret2.status, availBefore: bookBefore2.availableCopies, availAfter: bookAfter2.availableCopies });
     }
 
     // ============ Test 8: Inventory never exceeds totalCopies ============
@@ -192,7 +192,7 @@ async function main() {
         const fakeBorrow = {
             bookId: bR3.id, bookTitle: "Temp Return Book 3", bookImage: "",
             userEmail: u1email, userName: "Return User 1", userId: u1id,
-            borrowDate: new Date().toISOString(), returnDate: new Date(Date.now() + 7*24*60*60*1000).toISOString(),
+            borrowDate: new Date().toISOString(), returnDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             createdAt: new Date(),
         };
         const ins = await db.collection("borrows").insertOne(fakeBorrow);
@@ -205,7 +205,7 @@ async function main() {
         pass("inventoryNeverExceedsTotal", retCap.status === 409 &&
             bookAfterCap.availableCopies === 1 &&
             !!borrowStillExists,
-        { status: retCap.status, body: retCap.json, availAfter: bookAfterCap.availableCopies, borrowStillExists });
+            { status: retCap.status, body: retCap.json, availAfter: bookAfterCap.availableCopies, borrowStillExists });
         // Clean up: set back to 0 and delete the fake borrow record
         await db.collection("books").updateOne({ _id: new ObjectId(bR3.id) }, { $set: { availableCopies: 0 } });
         await db.collection("borrows").deleteOne({ _id: fakeId });
@@ -222,7 +222,7 @@ async function main() {
         // Exactly one should succeed (200), the other 404
         const oneSucceeded = (ra.status === 200 && rb.status === 404) || (rb.status === 200 && ra.status === 404);
         pass("concurrentSameBorrowRecord", oneSucceeded && !borrowExists,
-        { statusA: ra.status, statusB: rb.status, bodyA: ra.json, bodyB: rb.json, borrowDeleted: !borrowExists, avail: bookAfterConc.availableCopies });
+            { statusA: ra.status, statusB: rb.status, bodyA: ra.json, bodyB: rb.json, borrowDeleted: !borrowExists, avail: bookAfterConc.availableCopies });
     }
 
     // ============ Test 10: Borrow record deleted only after inventory update ============
@@ -233,9 +233,11 @@ async function main() {
     const finalBooks = await db.collection("books").countDocuments();
     const finalBorrows = await db.collection("borrows").countDocuments();
     console.log("FINAL books:", finalBooks, "borrows:", finalBorrows);
-    results.inventory = { initialBooks, initialBorrows, finalBooks, finalBorrows,
+    results.inventory = {
+        initialBooks, initialBorrows, finalBooks, finalBorrows,
         tempBooksCreated: createdBookIds.length, tempBorrowDocsCreated: createdBorrowIds.length,
-        booksTempOnly: finalBooks === initialBooks + createdBookIds.length };
+        booksTempOnly: finalBooks === initialBooks + createdBookIds.length
+    };
 
     // ---- Cleanup ----
     console.log("\n=== CLEANUP ===");
