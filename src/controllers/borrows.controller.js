@@ -205,7 +205,8 @@ export const createBorrow = async (req, res) => {
  * Requirements:
  * 1. Only returns borrow records belonging to the authenticated user (req.user.email).
  * 2. Never accepts a user email from query parameters or request body.
- * 3. Returns: bookId, bookTitle, bookImage, userEmail, borrowDate, returnDate.
+ * 3. Returns: _id, bookId, bookTitle, bookImage, userEmail, borrowDate, returnDate.
+ *    (The `_id` of the borrow record is required by clients to call DELETE /borrows/:id.)
  * 4. Sorted by borrowDate descending (newest first).
  * 5. Returns an empty array when the user has no borrow records.
  * 6. Returns 200 on success.
@@ -221,6 +222,7 @@ export const getBorrows = async (req, res) => {
             .toArray();
 
         const data = borrows.map((doc) => ({
+            _id: doc._id,
             bookId: doc.bookId,
             bookTitle: doc.bookTitle,
             bookImage: doc.bookImage || "",
