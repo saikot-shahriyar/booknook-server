@@ -21,21 +21,6 @@ const ensureBorrowsIndex = async (db) => {
     }
 };
 
-/**
- * POST /borrows
- * Protected: Borrow a book copy.
- *
- * Requirements:
- * 1. Accepts bookId from request body.
- * 2. Authenticated user from req.user (name, email, id).
- * 3. Validates ObjectId and ensures book exists.
- * 4. Prevents duplicate active borrows for the same user and book.
- * 5. Atomically decrements availableCopies by 1 using $inc when availableCopies > 0.
- * 6. Returns 409 if no copies are available.
- * 7. Server-generates borrowDate and returnDate (exactly 7 days after borrowDate).
- * 8. Rolls back inventory if borrow record insertion fails.
- * 9. Returns 201 on success.
- */
 export const createBorrow = async (req, res) => {
     let bookObjectId = null;
     let copyDecremented = false;
@@ -198,19 +183,7 @@ export const createBorrow = async (req, res) => {
     }
 };
 
-/**
- * GET /borrows
- * Protected: Get the currently authenticated user's borrow records.
- *
- * Requirements:
- * 1. Only returns borrow records belonging to the authenticated user (req.user.email).
- * 2. Never accepts a user email from query parameters or request body.
- * 3. Returns: _id, bookId, bookTitle, bookImage, userEmail, borrowDate, returnDate.
- *    (The `_id` of the borrow record is required by clients to call DELETE /borrows/:id.)
- * 4. Sorted by borrowDate descending (newest first).
- * 5. Returns an empty array when the user has no borrow records.
- * 6. Returns 200 on success.
- */
+
 export const getBorrows = async (req, res) => {
     try {
         const db = getDB();
@@ -245,25 +218,6 @@ export const getBorrows = async (req, res) => {
     }
 };
 
-/**
- * DELETE /borrows/:id
- * Protected: Return a borrowed book (restore 1 copy to inventory).
- *
- * Requirements:
- * 1. Validates the borrow record ID as a MongoDB ObjectId (400 if invalid).
- * 2. Finds the borrow record by ID and the authenticated user's email (req.user.email).
- * 3. Returns 404 if the record does not exist or does not belong to the current user.
- * 4. Finds the associated book using the stored bookId.
- * 5. Atomically increments availableCopies by 1 using $inc, guarded so it never
- *    exceeds totalCopies.
- * 6. Deletes the borrow record only after the inventory update succeeds.
- * 7. Duplicate returns: if the delete finds no record (already returned), the
- *    increment is compensated so inventory stays consistent; responds 404.
- * 8. Uses a MongoDB transaction when the deployment supports it (Atlas sharded
- *    clusters do); otherwise the compensation in 7 keeps the same guarantees.
- * 9. Never accepts a user email from request body or query parameters.
- * 10. Returns 200 on success.
- */
 export const returnBorrow = async (req, res) => {
     let session = null;
     let incrementDone = false;
@@ -308,10 +262,6 @@ export const returnBorrow = async (req, res) => {
         const userEmail = req.user.email;
         const db = getDB();
 
-        // Check whether this deployment supports multi-document
-        // transactions. MongoDB Atlas sharded/replica-set clusters do; standalone
-        // servers (and Atlas M0, which runs standalone) do not. When they do not,
-        // the compensation logic in this function provides the same guarantees.
         try {
             const hello = await db.command({ hello: 1 });
             useTransaction = hello.setName !== undefined || hello.msg === "isdbgrid";
@@ -339,33 +289,47 @@ export const returnBorrow = async (req, res) => {
             });
         }
 
-        // 2. Find the associated book. If it does not exist, do not delete the
-        //    borrow record: abort without changing anything.
-        if (!borrow.bookId) {
-            await abortTransactionSafely();
-            return res.status(404).json({
-                success: false,
-                message: "Associated book not found.",
+        const deleteOrphanBorrow = async () => {
+            const deleteResult = await db.collection("borrows").deleteOne(
+                { _id: borrowObjectId, userEmail },
+                opts
+            );
+
+            if (deleteResult.deletedCount === 0) {
+                await abortTransactionSafely();
+                return res.status(404).json({
+                    success: false,
+                    message: "Borrow record not found or already returned.",
+                });
+            }
+
+            if (useTransaction) {
+                await session.commitTransaction();
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: "Borrow record deleted. The associated book no longer exists.",
+                data: {
+                    _id: borrowObjectId,
+                    bookId: borrow.bookId || null,
+                },
             });
+        };
+
+        if (!borrow.bookId) {
+            return await deleteOrphanBorrow();
         }
 
         try {
             bookObjectId = new ObjectId(borrow.bookId);
         } catch (err) {
-            await abortTransactionSafely();
-            return res.status(404).json({
-                success: false,
-                message: "Associated book not found.",
-            });
+            return await deleteOrphanBorrow();
         }
 
         const book = await db.collection("books").findOne({ _id: bookObjectId }, opts);
         if (!book) {
-            await abortTransactionSafely();
-            return res.status(404).json({
-                success: false,
-                message: "Associated book not found.",
-            });
+            return await deleteOrphanBorrow();
         }
 
         // 3. Guarded atomic increment: availableCopies + 1 must stay <= totalCopies.
@@ -411,9 +375,7 @@ export const returnBorrow = async (req, res) => {
         );
 
         if (deleteResult.deletedCount === 0) {
-            // Duplicate return: another request deleted this record between our
-            // findOne and this delete. Undo the increment we just performed so the
-            // inventory stays consistent, then report 404.
+
             await abortTransactionSafely();
             if (!useTransaction) {
                 try {
