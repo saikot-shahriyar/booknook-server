@@ -1,5 +1,5 @@
 import "dotenv/config";
-// import dns from "node:dns";
+import dns from "node:dns";
 import express from "express";
 import cors from "cors";
 
@@ -7,7 +7,7 @@ import { connectDB } from "./config/db.js";
 import booksRouter from "./routes/books.routes.js";
 import borrowsRouter from "./routes/borrows.routes.js";
 
-// dns.setServers(["8.8.8.8", "8.8.4.4"]);
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const app = express();
 
