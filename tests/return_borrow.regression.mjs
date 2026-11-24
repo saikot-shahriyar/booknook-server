@@ -1,23 +1,10 @@
-/**
- * Regression tests for the return-borrow endpoint (DELETE /borrows/:id).
- *
- * Run with: node tests/return_borrow.regression.mjs
- *
- * Uses isolated test data only: books and borrows are inserted with fresh
- * ObjectIds and the "regression-" emails, and the isolated test documents
- * are removed at the end. Pre-existing MongoDB records are never modified
- * or deleted by the tests.
- */
-
 import "dotenv/config";
-import dns from "node:dns";
+// import dns from "node:dns";
 import { connectDB } from "../src/config/db.js";
 import { returnBorrow } from "../src/controllers/borrows.controller.js";
 import { ObjectId } from "mongodb";
 
-// Match src/server.js: the environment's default resolver cannot resolve the
-// Atlas host, so use the same public DNS servers the app sets at startup.
-dns.setServers(["8.8.8.8", "8.8.4.4"]);
+// dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const createdBooks = [];
 const createdBorrows = [];

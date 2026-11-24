@@ -1,24 +1,26 @@
 import { ObjectId } from "mongodb";
 import { client, getDB } from "../config/db.js";
 
-let indexEnsured = false;
-
 /**
- * Ensures the compound unique index on { bookId: 1, userEmail: 1 } exists in borrows collection.
- * This guarantees no duplicate active borrows can occur even under race conditions.
+ * Shared promise for the unique compound index on { bookId: 1, userEmail: 1 }.
+ * Concurrent callers await the same attempt so the index is initialized at most
+ * once at a time; the promise is cleared when initialization fails so that a
+ * later request can retry.
  */
-const ensureBorrowsIndex = async (db) => {
-    if (!indexEnsured) {
-        try {
-            await db.collection("borrows").createIndex(
-                { bookId: 1, userEmail: 1 },
-                { unique: true }
-            );
-            indexEnsured = true;
-        } catch (err) {
-            console.error("Failed to ensure unique borrows index:", err);
-        }
+let borrowsIndexPromise = null;
+
+const ensureBorrowsIndex = (db) => {
+    if (!borrowsIndexPromise) {
+        borrowsIndexPromise = db
+            .collection("borrows")
+            .createIndex({ bookId: 1, userEmail: 1 }, { unique: true })
+            .catch((err) => {
+                // Do not cache a rejected promise: allow a later request to retry.
+                borrowsIndexPromise = null;
+                throw err;
+            });
     }
+    return borrowsIndexPromise;
 };
 
 export const createBorrow = async (req, res) => {
@@ -46,7 +48,18 @@ export const createBorrow = async (req, res) => {
 
         bookObjectId = new ObjectId(trimmedBookId);
         const db = getDB();
-        await ensureBorrowsIndex(db);
+
+        try {
+            await ensureBorrowsIndex(db);
+        } catch (err) {
+            // Fail closed: never decrement inventory or insert a borrow record
+            // when the duplicate-prevention index could not be created.
+            console.error("Failed to ensure unique borrows index:", err);
+            return res.status(503).json({
+                success: false,
+                message: "Borrowing is temporarily unavailable. Please try again later.",
+            });
+        }
 
         // Check if the book exists
         const existingBook = await db.collection("books").findOne({ _id: bookObjectId });

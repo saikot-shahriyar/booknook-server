@@ -1,6 +1,5 @@
-
 import "dotenv/config";
-import dns from "node:dns";
+// import dns from "node:dns";
 import express from "express";
 import cors from "cors";
 

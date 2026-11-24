@@ -3,10 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 let remoteJWKSet;
 let cachedJwksUrl;
 
-/**
- * Returns a cached createRemoteJWKSet instance for the given JWKS URL.
- * Automatically refreshes the JWKS client if the URL changes.
- */
+
 const getRemoteJWKSet = (jwksUrl) => {
     if (!remoteJWKSet || cachedJwksUrl !== jwksUrl) {
         cachedJwksUrl = jwksUrl;
@@ -15,19 +12,6 @@ const getRemoteJWKSet = (jwksUrl) => {
     return remoteJWKSet;
 };
 
-/**
- * Express middleware to verify Better Auth JWTs (EdDSA/Ed25519) via remote JWKS.
- *
- * Checks:
- * - Authorization: Bearer <token>
- * - Signature against public keys at BETTER_AUTH_JWKS_URL
- * - Issuer matching BETTER_AUTH_ISSUER
- * - Audience matching BETTER_AUTH_AUDIENCE
- * - Expiration (exp)
- *
- * On success, attaches { id, email, name } to req.user.
- * On failure, responds with 401 and consistent JSON error message.
- */
 export const verifyAuth = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;

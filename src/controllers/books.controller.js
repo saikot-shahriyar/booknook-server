@@ -316,10 +316,7 @@ export const updateBook = async (req, res) => {
                 });
             }
 
-            // Atomic update using MongoDB aggregation pipeline:
-            // 1. $expr condition ensures newTotal is >= currently borrowed copies at the exact write instant.
-            // 2. availableCopies is dynamically calculated as newTotal - (totalCopies - availableCopies)
-            //    which safely preserves all concurrent borrow operations.
+
             const atomicFilter = {
                 _id: new ObjectId(id),
                 $expr: {
